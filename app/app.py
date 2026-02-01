@@ -1,65 +1,106 @@
-from flask import Flask, request, jsonify
-from app.auth import generate_token
+from flask import Flask, request, jsonify, send_file, abort
+import io
+import time
+
+from app.auth import generate_token, verify_token
 from app.crypto_utils import encrypt_bytes, decrypt_bytes
-from codecs import decode
 
 app = Flask(__name__)
 
-STORAGE = {}  # file_id -> blob
-TOKENS = {}   # token -> username
+FILES = {}
+
+# ======================
+# HEADERS DE SÉCURITÉ
+# ======================
+
+@app.after_request
+def set_security_headers(response):
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "object-src 'none'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), microphone=(), camera=(), fullscreen=()"
+    )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    # Supprime la fuite Werkzeug
+    response.headers.pop("Server", None)
+
+    return response
+
+
+# ======================
+# ROUTES
+# ======================
+
+@app.route("/", methods=["GET"])
+def index():
+    return "Microservice Flask sécurisé"
+
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.json or {}
-    username = data.get("username", "alice")
-    token = generate_token(username)
-    TOKENS[token] = username
-    return jsonify({"token": token}), 200
+    data = request.json
+    if not data or "username" not in data:
+        abort(400)
+
+    token = generate_token(data["username"])
+    return jsonify({"token": token})
+
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return jsonify({"error": "missing token"}), 401
-    token = auth.split(" ", 1)[1]
-    if token not in TOKENS:
-        return jsonify({"error": "invalid token"}), 403
+    token = request.headers.get("Authorization")
+    if not token:
+        abort(401)
 
-    username = TOKENS[token]
+    user = verify_token(token)
+    if not user:
+        abort(403)
 
-    f = request.files.get("file")
-    if f is None:
-        return jsonify({"error": "no file uploaded"}), 400
+    if "file" not in request.files:
+        abort(400)
 
-    blob = encrypt_bytes(f.read(), username)  # chiffrement avec clé utilisateur
-    print(blob.decode("latin1") + "\n")
-    print("test \n")
-    file_id = f"file-{len(STORAGE)+1}"
-    STORAGE[file_id] = {"owner": username, "blob": blob}  # stocke propriétaire
-    return jsonify({"file_id": file_id, "len": len(blob)}), 201
+    file = request.files["file"]
+    plaintext = file.read()
+
+    encrypted = encrypt_bytes(user, plaintext)
+    FILES[user] = encrypted
+
+    return jsonify({"status": "file stored securely"})
 
 
-@app.route("/download/<file_id>", methods=["GET"])
-def download(file_id):
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return jsonify({"error": "missing token"}), 401
-    token = auth.split(" ", 1)[1]
-    if token not in TOKENS:
-        return jsonify({"error": "invalid token"}), 403
+@app.route("/download", methods=["GET"])
+def download():
+    token = request.headers.get("Authorization")
+    if not token:
+        abort(401)
 
-    username = TOKENS[token]
-    entry = STORAGE.get(file_id)
-    if entry is None:
-        return jsonify({"error": "not found"}), 404
+    user = verify_token(token)
+    if not user:
+        abort(403)
 
-    if entry["owner"] != username:
-        return jsonify({"error": "forbidden"}), 403  # seul le propriétaire peut déchiffrer
+    encrypted = FILES.get(user)
+    if not encrypted:
+        abort(404)
 
-    blob = entry["blob"]
-    data = decrypt_bytes(blob, username)
-    return data, 200, {"Content-Type": "application/octet-stream"}
+    plaintext = decrypt_bytes(user, encrypted)
+
+    return send_file(
+        io.BytesIO(plaintext),
+        as_attachment=True,
+        download_name="file.txt"
+    )
+
+
+# ======================
+# LANCEMENT
+# ======================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
-
+    app.run(host="127.0.0.1", port=5000, debug=False)

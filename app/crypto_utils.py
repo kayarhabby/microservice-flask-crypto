@@ -1,24 +1,50 @@
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os
-import hmac
-import hashlib
+import base64
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-def derive_user_key(username: str) -> bytes:
-    """Crée une clé symétrique unique pour chaque utilisateur à partir de son username"""
-    return hashlib.sha256(username.encode()).digest()
+# Secret serveur (doit être stocké dans une variable d'environnement en pratique)
+SERVER_SECRET = b"super-secret-server-key-change-me"
 
-NONCE = b"\x00" * 12
+def derive_user_key(username: str, salt: bytes) -> bytes:
+    """
+    Dérive une clé AES à partir du nom d'utilisateur + secret serveur.
+    Utilise PBKDF2-HMAC-SHA256.
+    """
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=200_000,
+    )
+    return kdf.derive(username.encode() + SERVER_SECRET)
 
-def encrypt_bytes(data: bytes, username: str) -> bytes:
-    key = derive_user_key(username)
-    aes = AESGCM(key)
-    ciphertext = aes.encrypt(NONCE, data, None)
-    return NONCE + ciphertext
 
-def decrypt_bytes(blob: bytes, username: str) -> bytes:
-    """Déchiffre les données pour un utilisateur donné"""
-    key = derive_user_key(username)
-    aes = AESGCM(key)
-    nonce = blob[:12]
-    ciphertext = blob[12:]
-    return aes.decrypt(nonce, ciphertext, associated_data=None)
+def encrypt_bytes(username: str, plaintext: bytes) -> bytes:
+    """
+    Chiffrement AES-GCM avec nonce aléatoire.
+    Format de sortie : salt || nonce || ciphertext
+    """
+    salt = os.urandom(16)
+    key = derive_user_key(username, salt)
+
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    return salt + nonce + ciphertext
+
+
+def decrypt_bytes(username: str, blob: bytes) -> bytes:
+    """
+    Déchiffrement AES-GCM.
+    """
+    salt = blob[:16]
+    nonce = blob[16:28]
+    ciphertext = blob[28:]
+
+    key = derive_user_key(username, salt)
+    aesgcm = AESGCM(key)
+
+    return aesgcm.decrypt(nonce, ciphertext, None)

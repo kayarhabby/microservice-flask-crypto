@@ -25,26 +25,24 @@ curl -X POST http://127.0.0.1:5000/login \
 -d '{"username":"alice"}'
 
 Réponse attendue :
-{"token":"alice-<timestamp>-<random>"}
-
-Par exemple : "token": "alice-1767879085-8103900"
+{"token":"svuV4GOAjI0rPfDWePTto0xJKmlf8P7vJgdjkVgBPds"}
 
 3. Upload d'un fichier
 
 # Remplacer <votre_token> par le token obtenu précédemment
 TOKEN="<votre_token>"
-curl -X POST http://127.0.0.1:5000/upload \
--H "Authorization: Bearer $TOKEN" \
--F "file=@./exemple.txt"
+curl -X POST "http://127.0.0.1:5000/upload" `
+  -H "Authorization: $TOKEN" `
+  -F "file=@exemple.txt"
 
 Réponse attendue :
-{"file_id":"file-1" 
-"len":61}
+{"status":"file stored securely"}
 
 4. Télécharger un fichier
 
-curl -X GET http://127.0.0.1:5000/download/file-1 \
--H "Authorization: Bearer $TOKEN" 
+curl -X GET "http://127.0.0.1:5000/download" `
+  -H "Authorization: $TOKEN" `
+  -o file.txt
 
 Réponse attendue : Contenu du fichier ou une erreur d'autorisation 
 
