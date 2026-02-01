@@ -1,0 +1,6 @@
+projectKey=microserviceFlaskCrypto
+serverUrl=http://localhost:9000
+serverVersion=26.1.0.118079
+dashboardUrl=http://localhost:9000/dashboard?id=microserviceFlaskCrypto
+ceTaskId=422c4788-e745-46f3-bfc0-992a9c5e0596
+ceTaskUrl=http://localhost:9000/api/ce/task?id=422c4788-e745-46f3-bfc0-992a9c5e0596
