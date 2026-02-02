@@ -6,7 +6,8 @@ Exemples d'utilisation du micro-service Flask
 
     a. Créer un environnement virtuel python : 
         python3 -m venv .venv
-        source .venv/bin/activate
+        source .venv/bin/activate -> Linux
+        .\.venv\Scripts\Activate.ps1 -> windows
 
     b. Installer les dépendances :
         pip install -r requirements.txt
@@ -32,7 +33,7 @@ Réponse attendue :
 # Remplacer <votre_token> par le token obtenu précédemment
 TOKEN="<votre_token>"
 curl -X POST "http://127.0.0.1:5000/upload" `
-  -H "Authorization: $TOKEN" `
+  -H "Authorization: $env:TOKEN" `
   -F "file=@exemple.txt"
 
 Réponse attendue :
@@ -41,7 +42,7 @@ Réponse attendue :
 4. Télécharger un fichier
 
 curl -X GET "http://127.0.0.1:5000/download" `
-  -H "Authorization: $TOKEN" `
+  -H "Authorization: $env:TOKEN" `
   -o file.txt
 
 Réponse attendue : Contenu du fichier ou une erreur d'autorisation 
